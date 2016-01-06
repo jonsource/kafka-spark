@@ -1,0 +1,11 @@
+
+sudo docker run -it -p 7077:7077 -h 172.17.0.5 sequenceiq/spark:1.5.1 bash
+
+cd /usr/local/spark
+./sbin/start-master.sh
+./sbin/start-slave.sh spark://172.17.0.5:7077
+
+service ssh start
+cd /usr/local/hadoop/sbin
+./start-dfs.sh
+./start-yarn.sh
