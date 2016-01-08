@@ -1,11 +1,21 @@
+# start docker-spark image
+sudo docker run -it -p 7077:7077 -h 172.17.0.5 performio/docker-spark:1.5.1 bash
 
-sudo docker run -it -p 7077:7077 -h 172.17.0.5 sequenceiq/spark:1.5.1 bash
-
-cd /usr/local/spark
-./sbin/start-master.sh
-./sbin/start-slave.sh spark://172.17.0.5:7077
-
+# commands to execute after start of docker-spark image
 service ssh start
 cd /usr/local/hadoop/sbin
 ./start-dfs.sh
 ./start-yarn.sh
+
+# starting spark master and worker
+cd /usr/local/spark
+./sbin/start-master.shcd /usr/local/spark
+./sbin/start-master.sh
+
+./sbin/start-slave.sh spark://172.17.0.5:7077
+
+# submiting task to spark
+bin/spark-submit --packages org.apache.spark:spark-streaming-kafka_2.10:1.5.2 --master spark://172.17.0.4:7077 ../kafka-spark/wordCount.py 172.17.0.2:2181 test
+
+#build image
+sudo docker build -t performio/docker-spark .
