@@ -29,10 +29,58 @@
 from __future__ import print_function
 
 import sys
+import MySQLdb
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
+from pyspark.sql import SQLContext
+
+
+def myPrint(rdd):
+    print("-------------------------------------------\n %s \n-------------------------------------------\n" % rdd.count())
+
+class saver(object):
+    def __init__(self, sqlc):
+        self.sqlc = sqlc
+        self.connection = MySQLdb.connect(user='root', db='test', host="172.17.0.1", passwd="1234")
+        self.cursor = self.connection.cursor()
+
+    def saveRdd(self, rdd, moar=None):
+        if not rdd.count():
+            print('Empty set - nothing to save!\n')
+            return
+        df = self.sqlc.createDataFrame(rdd, ['word', 'count'])
+        # df.write.jdbc(
+        #     url="jdbc:postgresql://[hostname]/[database]?user=[username]&password=[password]",
+        #     dbtable="pubs",
+        #     mode="overwrite",
+        # )
+        list = df.collect()
+        for x in list:
+            que = 'INSERT INTO test.words (word, count) VALUES ("%s", %s) ON DUPLICATE KEY UPDATE count = count + %s' % (x[0], x[1], x[1])
+            #que = 'INSERT INTO test.word (word, count) VALUES ("%s", %s)' % (x[0], x[1])
+            print(que)
+            self.cursor.execute(que)
+
+        self.connection.commit()
+
+
+
+
+# tomorrow = datetime.now().date() + timedelta(days=1)
+#
+# add_employee = ("INSERT INTO employees "
+#                "(first_name, last_name, hire_date, gender, birth_date) "
+#                "VALUES (%s, %s, %s, %s, %s)")tomorrow = datetime.now().date() + timedelta(days=1)
+#
+# add_employee = ("INSERT INTO employees "
+#                "(first_name, last_name, hire_date, gender, birth_date) "
+#                "VALUES (%s, %s, %s, %s, %s)")
+
+    def saveStream(self, dStream):
+        dStream.foreachRDD(lambda rdd: self.saveRdd(rdd))
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -41,6 +89,7 @@ if __name__ == "__main__":
 
     sc = SparkContext(appName="PythonStreamingKafkaWordCount")
     ssc = StreamingContext(sc, 5)
+    sqlc = SQLContext(sc)
 
     zkQuorum, topic = sys.argv[1:]
     kvs = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 1})
@@ -49,6 +98,12 @@ if __name__ == "__main__":
         .map(lambda word: (word, 1)) \
         .reduceByKey(lambda a, b: a+b)
     counts.pprint()
+
+    s = saver(sqlc)
+    s.saveStream(counts)
+    # df = sqlc.createDataFrame(counts, ['word', 'count']);
+    # print(df)
+
 
     ssc.start()
     ssc.awaitTermination()

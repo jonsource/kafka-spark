@@ -16,6 +16,7 @@ kafka:
     # format: topic_name:partitions:replicas
     KAFKA_CREATE_TOPICS: "test:12:2"
   volumes:
+  # has docker installed inside - this allows to execute docker commands on host from container
     - /var/run/docker.sock:/var/run/docker.sock
 spark-master:
   image: performio/docker-spark
@@ -24,8 +25,6 @@ spark-master:
     - kafka:kafka
   environment:
     RUN_MASTER: 1
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
 spark-worker:
   image: performio/docker-spark
   environment:
@@ -36,5 +35,8 @@ spark-worker:
     - zookeeper:zk
     - kafka:kafka
     - spark-master:spark-master
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
+# cassandra:
+#  image: cassandra
+#  environment:
+#    CLUSTER_NAME: csndr
+#    CASSANDRA_SEEDS: 172.17.0.3,172.17.0.4
