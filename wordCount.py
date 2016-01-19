@@ -37,8 +37,8 @@ from pyspark.streaming.kafka import KafkaUtils
 from pyspark.sql import SQLContext
 
 
-def myPrint(rdd):
-    print("-------------------------------------------\n %s \n-------------------------------------------\n" % rdd.count())
+def myPrint(msg):
+    print("\n-------------------------------------------\n %s\n-------------------------------------------\n" % msg)
 
 class saver(object):
     def __init__(self, sqlc):
@@ -48,7 +48,7 @@ class saver(object):
 
     def saveRdd(self, rdd, moar=None):
         if not rdd.count():
-            print('Empty set - nothing to save!\n')
+            myPrint('Empty set - nothing to save!')
             return
         df = self.sqlc.createDataFrame(rdd, ['word', 'count'])
         # df.write.jdbc(
@@ -59,9 +59,11 @@ class saver(object):
         list = df.collect()
         for x in list:
             que = 'INSERT INTO test.words (word, count) VALUES ("%s", %s) ON DUPLICATE KEY UPDATE count = count + %s' % (x[0], x[1], x[1])
-            #que = 'INSERT INTO test.word (word, count) VALUES ("%s", %s)' % (x[0], x[1])
-            print(que)
+            # que = 'INSERT INTO test.word (word, count) VALUES ("%s", %s)' % (x[0], x[1])
+            # print(que)
             self.cursor.execute(que)
+        myPrint("%s messages" % len(list))
+
 
         self.connection.commit()
 
