@@ -58,11 +58,12 @@ class saver(object):
         # )
         list = df.collect()
         for x in list:
-            que = "UPDATE test.impressions SET view_count = view_count + %s WHERE banner_id = %s AND view_date = DATE_FORMAT(NOW(), '%%Y-%%m-%%d %%H:00:00')" % (x[1], x[0])
+            # x[0][0]=datum,x[0][1]=id,x[1]=imps
+            que = "UPDATE test.impressions SET view_count = view_count + %s WHERE banner_id = %s AND view_date = \"%s\"" % (x[1], x[0][1], x[0][0])
             print(que)
             cnt = self.cursor.execute(que)
             if not cnt:
-                que = "INSERT INTO test.impressions (banner_id, view_date, view_count) VALUES (%s, DATE_FORMAT(NOW(), '%%Y-%%m-%%d %%H:00:00'), %s)" % (x[0], x[1])
+                que = "INSERT INTO test.impressions (banner_id, view_date, view_count) VALUES (%s, \"%s\", %s)" % (x[0][1], x[0][0], x[1])
                 print(que)
                 self.cursor.execute(que)
         myPrint("%s messages" % len(list))
@@ -71,6 +72,16 @@ class saver(object):
     def saveStream(self, dStream):
         dStream.foreachRDD(lambda rdd: self.saveRdd(rdd))
 
+def cutSeconds(time):
+    time  = time[:-2]
+    time +="00"
+    return time
+
+def parse(row):
+    row = row.split(' ',3)
+    date = str(row[1]) + " " + str(cutSeconds(row[2]))
+    bannerId = int(row[3]) 
+    return ((date, bannerId), 1)
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -84,9 +95,10 @@ if __name__ == "__main__":
     zkQuorum, topic = sys.argv[1:]
     kvs = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 1})
     lines = kvs.map(lambda x: x[1])
-    counts = lines.flatMap(lambda line: line.replace("view ", '').split(" ")) \
-        .map(lambda word: (word, 1)) \
-        .reduceByKey(lambda a, b: a+b)
+
+    pairs  = lines.map(parse)
+    # format je (('2016-01-28 14:06:00', 999), 6)
+    counts = pairs.reduceByKey(lambda a, b: a+b)
     counts.pprint()
 
     s = saver(sqlc)
