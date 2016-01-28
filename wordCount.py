@@ -58,27 +58,15 @@ class saver(object):
         # )
         list = df.collect()
         for x in list:
-            que = 'INSERT INTO test.words (word, count) VALUES ("%s", %s) ON DUPLICATE KEY UPDATE count = count + %s' % (x[0], x[1], x[1])
-            # que = 'INSERT INTO test.word (word, count) VALUES ("%s", %s)' % (x[0], x[1])
-            # print(que)
-            self.cursor.execute(que)
+            que = "UPDATE test.impressions SET view_count = view_count + %s WHERE banner_id = %s AND view_date = DATE_FORMAT(NOW(), '%%Y-%%m-%%d %%H:00:00')" % (x[1], x[0])
+            print(que)
+            cnt = self.cursor.execute(que)
+            if not cnt:
+                que = "INSERT INTO test.impressions (banner_id, view_date, view_count) VALUES (%s, DATE_FORMAT(NOW(), '%%Y-%%m-%%d %%H:00:00'), %s)" % (x[0], x[1])
+                print(que)
+                self.cursor.execute(que)
         myPrint("%s messages" % len(list))
-
-
         self.connection.commit()
-
-
-
-
-# tomorrow = datetime.now().date() + timedelta(days=1)
-#
-# add_employee = ("INSERT INTO employees "
-#                "(first_name, last_name, hire_date, gender, birth_date) "
-#                "VALUES (%s, %s, %s, %s, %s)")tomorrow = datetime.now().date() + timedelta(days=1)
-#
-# add_employee = ("INSERT INTO employees "
-#                "(first_name, last_name, hire_date, gender, birth_date) "
-#                "VALUES (%s, %s, %s, %s, %s)")
 
     def saveStream(self, dStream):
         dStream.foreachRDD(lambda rdd: self.saveRdd(rdd))
@@ -96,7 +84,7 @@ if __name__ == "__main__":
     zkQuorum, topic = sys.argv[1:]
     kvs = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 1})
     lines = kvs.map(lambda x: x[1])
-    counts = lines.flatMap(lambda line: line.split(" ")) \
+    counts = lines.flatMap(lambda line: line.replace("view ", '').split(" ")) \
         .map(lambda word: (word, 1)) \
         .reduceByKey(lambda a, b: a+b)
     counts.pprint()
