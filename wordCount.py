@@ -43,7 +43,7 @@ def myPrint(msg):
 class saver(object):
     def __init__(self, sqlc):
         self.sqlc = sqlc
-        self.connection = MySQLdb.connect(user='root', db='test', host="172.17.0.1", passwd="1234")
+        self.connection = MySQLdb.connect(user='root', db='test', host="127.0.0.1", passwd="")
         self.cursor = self.connection.cursor()
 
     def saveRdd(self, rdd, moar=None):
