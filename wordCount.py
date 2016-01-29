@@ -34,6 +34,7 @@ import MySQLdb
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
+from pyspark.streaming.kafka import TopicAndPartition
 from pyspark.sql import SQLContext
 
 
@@ -51,26 +52,78 @@ class saver(object):
             myPrint('Empty set - nothing to save!')
             return
         df = self.sqlc.createDataFrame(rdd, ['word', 'count'])
-        # df.write.jdbc(
-        #     url="jdbc:postgresql://[hostname]/[database]?user=[username]&password=[password]",
-        #     dbtable="pubs",
-        #     mode="overwrite",
-        # )
         list = df.collect()
+        self.cursor.execute("BEGIN")
         for x in list:
-            que = "UPDATE test.impressions SET view_count = view_count + %s WHERE banner_id = %s AND view_date = DATE_FORMAT(NOW(), '%%Y-%%m-%%d %%H:00:00')" % (x[1], x[0])
+            # x[0][0]=datum, x[0][1]=id, x[1]=imps
+            que = "UPDATE test.impressions SET view_count = view_count + %s WHERE banner_id = %s AND view_date = \"%s\"" % (x[1], x[0][1], x[0][0])
             print(que)
             cnt = self.cursor.execute(que)
             if not cnt:
-                que = "INSERT INTO test.impressions (banner_id, view_date, view_count) VALUES (%s, DATE_FORMAT(NOW(), '%%Y-%%m-%%d %%H:00:00'), %s)" % (x[0], x[1])
+                que = "INSERT INTO test.impressions (banner_id, view_date, view_count) VALUES (%s, \"%s\", %s)" % (x[0][1], x[0][0], x[1])
                 print(que)
                 self.cursor.execute(que)
         myPrint("%s messages" % len(list))
+        saveStartOffsets("impressions", self.cursor)
+        self.cursor.execute("COMMIT")
         self.connection.commit()
 
     def saveStream(self, dStream):
         dStream.foreachRDD(lambda rdd: self.saveRdd(rdd))
 
+offsetRanges = []
+
+def storeOffsetRanges(rdd):
+    global offsetRanges
+    offsetRanges = rdd.offsetRanges()
+    return rdd
+
+def printOffsetRanges(rdd):
+    for o in offsetRanges:
+        print("%s %s %s %s" % (o.topic, o.partition, o.fromOffset, o.untilOffset))
+
+def cutSeconds(time):
+    time  = time[:-5]
+    time +="00:00"
+    return time
+
+def parse(row):
+    row = row.split(' ',3)
+    date = str(row[1]) + " " + str(cutSeconds(row[2]))
+    bannerId = int(row[3]) 
+    return ((date, bannerId), 1)
+
+def getStartOffsets(task, topic, partitions):
+    connection = MySQLdb.connect(user='root', db='test', host="127.0.0.1", passwd="")
+    cursor = connection.cursor()
+
+    que = 'SELECT `partition`, `offset` FROM `test`.`kafka_offsets` WHERE `task`="%s" AND `topic`="%s"' % (task, topic)
+    print(que)
+    cnt = cursor.execute(que)
+    if not cnt:
+        for p in range(partitions):
+            que = 'INSERT INTO test.kafka_offsets (`task`,`topic`,`partition`,`offset`) VALUES ("%s","%s",%s,0)' % (task, topic, p)
+            print(que)
+            cnt = cursor.execute(que)
+            connection.commit()
+        return getStartOffsets(task, topic, partitions)
+    ret = {}
+    for row in cursor.fetchall():
+	ret[TopicAndPartition(topic, row[0])] = long(row[1])
+    connection.close()
+    return ret
+
+def saveStartOffsets(task, cursor):
+    global offsetRanges
+    for o in offsetRanges:
+        print("%s %s %s %s" % (o.topic, o.partition, o.fromOffset, o.untilOffset))
+        que = 'UPDATE test.kafka_offsets SET `offset` = %s WHERE `task`="%s" AND `topic`="%s" AND `partition`=%s' % (o.untilOffset, task, o.topic, o.partition)
+        print(que)
+        cnt = cursor.execute(que)
+        # if not cnt:
+        #    que = 'INSERT INTO test.kafka_offsets (`task`,`topic`,`partition`,`offset`) VALUES ("%s","%s",%s,%s)' % (task, o.topic, o.partition, o.untilOffset)
+        #    print(que)
+        #    cnt = cursor.execute(que)
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -78,15 +131,19 @@ if __name__ == "__main__":
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingKafkaWordCount")
-    ssc = StreamingContext(sc, 5)
+    ssc = StreamingContext(sc, 1)
     sqlc = SQLContext(sc)
 
     zkQuorum, topic = sys.argv[1:]
-    kvs = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 1})
+    offsets = getStartOffsets("impressions", "test", 12)
+    print(offsets)
+    kvs = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": "172.16.60.80:9092,172.16.60.81:9092,172.16.60.82:9092"}, fromOffsets=offsets)
+    #kvs = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 12})
+    kvs.transform(storeOffsetRanges).foreachRDD(printOffsetRanges)
     lines = kvs.map(lambda x: x[1])
-    counts = lines.flatMap(lambda line: line.replace("view ", '').split(" ")) \
-        .map(lambda word: (word, 1)) \
-        .reduceByKey(lambda a, b: a+b)
+    pairs  = lines.map(parse)
+    # format je (('2016-01-28 14:06:00', 999), 6)
+    counts = pairs.reduceByKey(lambda a, b: a+b)
     counts.pprint()
 
     s = saver(sqlc)
