@@ -14,7 +14,7 @@ kafka:
     # KAFKA_ZOOKEEPER_CONNECT: kafkaspark_zookeeper_1:2181
     KAFKA_ZOOKEEPER_CONNECT: 172.17.0.2:2181
     # format: topic_name:partitions:replicas
-    KAFKA_CREATE_TOPICS: "test:12:2"
+    KAFKA_CREATE_TOPICS: "test:12:3"
   volumes:
   # has docker installed inside - this allows to execute docker commands on host from container
     - /var/run/docker.sock:/var/run/docker.sock
