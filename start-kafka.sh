@@ -1,5 +1,11 @@
 #!/bin/bash
 
+_term() {
+	echo "$(date) SIGTERM received - stopping kafka broker" >> /kafka/start-stop.log
+	kill $KAFKA_SERVER_PID
+	echo "$(date) Broker stopped" >> /kafka/start-stop.log
+}
+
 if [[ -z "$KAFKA_ADVERTISED_PORT" ]]; then
     export KAFKA_ADVERTISED_PORT=$(docker port `hostname` 9092 | sed -r "s/.*:(.*)/\1/g")
 fi
@@ -35,17 +41,31 @@ do
   fi
 done
 
+trap _term SIGTERM
 
 $KAFKA_HOME/bin/kafka-server-start.sh $KAFKA_HOME/config/server.properties &
 KAFKA_SERVER_PID=$!
 
+#save pid for stop-kafka.sh
+echo $KAFKA_SERVER_PID > /kafka/server_pid
+echo "$(date) Kafka broker started as PID $KAFKA_SERVER_PID" >> /kafka/start-stop.log
+
 while netstat -lnt | awk '$4 ~ /:9092$/ {exit 1}'; do sleep 1; done
+
+echo "$(date) Listening at 9092" >> /kafka/start-stop.log
 
 if [[ -n $KAFKA_CREATE_TOPICS ]]; then
     IFS=','; for topicToCreate in $KAFKA_CREATE_TOPICS; do
         IFS=':' read -a topicConfig <<< "$topicToCreate"
         $KAFKA_HOME/bin/kafka-topics.sh --create --zookeeper $KAFKA_ZOOKEEPER_CONNECT --replication-factor ${topicConfig[2]} --partition ${topicConfig[1]} --topic "${topicConfig[0]}"
+	echo "$(date) Creating topic ${topicConfig[0]}" >> /kafka/start-stop.log
     done
 fi
 
+echo "$(date) Ready" >> /kafka/start-stop.log
+
 wait $KAFKA_SERVER_PID
+
+echo "$(date) Work done .." >> /kafka/start-stop.log
+sleep 1
+echo "$(date) bye" >> /kafka/start-stop.log
