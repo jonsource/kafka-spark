@@ -13,7 +13,7 @@ if [[ -z "$KAFKA_BROKER_ID" ]]; then
     export KAFKA_BROKER_ID=$(docker inspect `hostname` | jq --raw-output '.[0] | .Name' | awk -F_ '{print $3}')
 fi
 if [[ -z "$KAFKA_LOG_DIRS" ]]; then
-    export KAFKA_LOG_DIRS="/kafka/kafka-logs-$KAFKA_BROKER_ID"
+    export KAFKA_LOG_DIRS="/kafka/kafka-logs-$KAFKA_BROKER_ID,/kafka/kafka-logs2-$KAFKA_BROKER_ID"
 fi
 if [[ -z "$KAFKA_ZOOKEEPER_CONNECT" ]]; then
     export KAFKA_ZOOKEEPER_CONNECT=$(env | grep ZK.*PORT_2181_TCP= | sed -e 's|.*tcp://||' | paste -sd ,)
