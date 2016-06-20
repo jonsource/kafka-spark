@@ -90,7 +90,10 @@ def cutSeconds(time):
 def parse(row):
     row = row.split(' ',3)
     date = str(row[1]) + " " + str(cutSeconds(row[2]))
-    bannerId = int(row[3]) 
+    try:
+        bannerId = int(row[3]) 
+    except Exception:
+        bannerId = 0    
     return ((date, bannerId), 1)
 
 def getStartOffsets(task, topic, partitions):
@@ -131,13 +134,13 @@ if __name__ == "__main__":
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingKafkaWordCount")
-    ssc = StreamingContext(sc, 1)
+    ssc = StreamingContext(sc, 5)
     sqlc = SQLContext(sc)
 
-    zkQuorum, topic = sys.argv[1:]
-    offsets = getStartOffsets("impressions", "test", 12)
+    kafkaList, topic = sys.argv[1:]
+    offsets = getStartOffsets("impressions", topic, 12)
     print(offsets)
-    kvs = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": "172.16.60.80:9092,172.16.60.81:9092,172.16.60.82:9092"}, fromOffsets=offsets)
+    kvs = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": kafkaList}, fromOffsets=offsets)
     #kvs = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 12})
     kvs.transform(storeOffsetRanges).foreachRDD(printOffsetRanges)
     lines = kvs.map(lambda x: x[1])
